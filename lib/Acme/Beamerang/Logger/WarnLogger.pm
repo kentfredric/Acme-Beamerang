@@ -91,20 +91,20 @@ sub _log {
     warn "[${label}] $message";
 }
 
-for my $level (@levels) {
-    my $ulevel  = '_' . uc $level;
-    my $is_name = "is_$level";
-    local $@;
+_gen_level($_) for (@levels);
 
-    no strict 'refs';
-    *{$level} = sub {
-        use strict 'refs';
+sub _gen_level_sub {
+    my ( $level, $is_name ) = @_;
+    return sub {
         my $self = shift;
         $self->_log( $level, @_ ) if $self->$is_name;
     };
+}
 
-    *{$is_name} = sub {
-        use strict 'refs';
+sub _gen_is_level_sub {
+    my ($level) = @_;
+    my $ulevel = '_' . uc $level;
+    return sub {
         my $self = shift;
 
         my ( $ep, $gp ) = @{$self}{qw( env_prefix group_env_prefix )};
@@ -140,15 +140,27 @@ for my $level (@levels) {
         }
         return $level_num{$level} >= $level_num{$upto};
     };
-    if ( $INC{'Sub/Name.pm'} ) {
-        Sub::Name::subname( "$level",   \&{$level} );
-        Sub::Name::subname( "$is_name", \&{$is_name} );
-    }
-    elsif ( $INC{'Sub/Util.pm'} ) {
-        Sub::Util::set_subname( "$level",   \&{$level} );
-        Sub::Util::set_subname( "$is_name", \&{$is_name} );
-    }
 }
 
+sub _gen_level {
+    my ($level) = @_;
+    my $is_name = "is_$level";
+
+    my $level_sub = _gen_level_sub( $level, $is_name );
+    my $is_level_sub = _gen_is_level_sub($level);
+
+    if ( $INC{'Sub/Name.pm'} ) {
+        Sub::Name::subname( "$level",   $level_sub );
+        Sub::Name::subname( "$is_name", $is_level_sub );
+    }
+    elsif ( $INC{'Sub/Util.pm'} ) {
+        Sub::Util::set_subname( "$level",   $level_sub );
+        Sub::Util::set_subname( "$is_name", $is_level_sub );
+    }
+
+    no strict 'refs';
+    *{$level}   = $level_sub;
+    *{$is_name} = $is_level_sub;
+}
 1;
 
