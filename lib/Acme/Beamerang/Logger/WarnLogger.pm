@@ -142,6 +142,26 @@ sub _gen_is_level_sub {
     };
 }
 
+# Once an XS Sub namer is used once, always use the same one
+# the idea being if Sub::Util is loaded first, and we name some
+# subs with it, Sub::Name being loaded later won't make the subs get
+# named with a different implementation. ( Because they implement it differently )
+{
+    my $sub_name_impl;
+
+    sub _name_sub {
+        return $sub_name_impl->(@_) if $sub_name_impl;
+        if ( $INC{'Sub/Name.pm'} ) {
+            $sub_name_impl = Sub::Name->can('subname');
+            return $sub_name_impl->(@_);
+        }
+        if ( $INC{'Sub/Util.pm'} ) {
+            $sub_name_impl = Sub::Util->can('set_subname');
+            return $sub_name_impl->(@_);
+        }
+        return;
+    }
+}
 sub _gen_level {
     my ($level) = @_;
     my $is_name = "is_$level";
@@ -149,14 +169,8 @@ sub _gen_level {
     my $level_sub = _gen_level_sub( $level, $is_name );
     my $is_level_sub = _gen_is_level_sub($level);
 
-    if ( $INC{'Sub/Name.pm'} ) {
-        Sub::Name::subname( "$level",   $level_sub );
-        Sub::Name::subname( "$is_name", $is_level_sub );
-    }
-    elsif ( $INC{'Sub/Util.pm'} ) {
-        Sub::Util::set_subname( "$level",   $level_sub );
-        Sub::Util::set_subname( "$is_name", $is_level_sub );
-    }
+    _name_sub( "$level",   $level_sub );
+    _name_sub( "$is_name", $is_level_sub );
 
     no strict 'refs';
     *{$level}   = $level_sub;
