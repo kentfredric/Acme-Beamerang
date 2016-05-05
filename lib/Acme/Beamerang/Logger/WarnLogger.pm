@@ -38,11 +38,14 @@ use warnings;
 use Carp qw( croak );
 
 use Term::ANSIColor qw( colored );
-{
-    no strict 'refs';
-    delete ${ __PACKAGE__ . q[::] }{$_}
-      for qw( croak colored );    # namespace clean
-}
+
+delete $Acme::Beamerang::Logger::WarnLogger::{$_}
+  for qw( croak colored );    # namespace clean
+
+delete $Acme::Beamerang::Logger::WarnLogger::{$_}
+  for qw( _gen_level_sub _gen_is_level_sub _name_sub )
+  ;                           # not for external use cleaning
+
 my ( @levels, %level_num, %level_labels );
 
 BEGIN {
@@ -162,6 +165,7 @@ sub _gen_is_level_sub {
         return;
     }
 }
+
 sub _gen_level {
     my ($level) = @_;
     my $is_name = "is_$level";
