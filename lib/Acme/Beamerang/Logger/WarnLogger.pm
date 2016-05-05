@@ -43,7 +43,7 @@ delete $Acme::Beamerang::Logger::WarnLogger::{$_}
   for qw( croak colored );    # namespace clean
 
 delete $Acme::Beamerang::Logger::WarnLogger::{$_}
-  for qw( _gen_level_sub _gen_is_level_sub _name_sub )
+  for qw( _gen_level_sub _gen_is_level_sub _name_sub _can_name_sub )
   ;                           # not for external use cleaning
 
 my ( @levels, %level_num, %level_labels );
@@ -67,6 +67,20 @@ BEGIN {
               colored( $level_colors{$level}, $level_labels{$level} );
         }
     }
+
+    # Lazily find the best XS Sub naming implementation possible.
+    # Preferring an already loaded implementation where possible.
+    #<<< Tidy Guard
+    my $impl = ( $INC{'Sub/Util.pm'}           and defined &Sub::Util::set_subname )  ? 'SU'
+             : ( $INC{'Sub/Name.pm'}           and defined &Sub::Name::subname     )  ? 'SN'
+             : ( eval { require Sub::Util; 1 } and defined &Sub::Util::set_subname )  ? 'SU'
+             : ( eval { require Sub::Name; 1 } and defined &Sub::Name::subname     )  ? 'SN'
+             :                                                                          undef;
+    *_name_sub = $impl eq 'SU' ? \&Sub::Util::set_subname
+               : $impl eq 'SN' ? \&Sub::Name::subname
+               :                 sub { $_[1] };
+    #>>>
+    *_can_name_sub = $impl ? sub() { 1 } : sub () { 0 };
 }
 
 _gen_level($_) for (@levels);
@@ -145,27 +159,6 @@ sub _gen_is_level_sub {
     };
 }
 
-# Once an XS Sub namer is used once, always use the same one
-# the idea being if Sub::Util is loaded first, and we name some
-# subs with it, Sub::Name being loaded later won't make the subs get
-# named with a different implementation. ( Because they implement it differently )
-{
-    my $sub_name_impl;
-
-    sub _name_sub {
-        return $sub_name_impl->(@_) if $sub_name_impl;
-        if ( $INC{'Sub/Name.pm'} ) {
-            $sub_name_impl = Sub::Name->can('subname');
-            return $sub_name_impl->(@_);
-        }
-        if ( $INC{'Sub/Util.pm'} ) {
-            $sub_name_impl = Sub::Util->can('set_subname');
-            return $sub_name_impl->(@_);
-        }
-        return;
-    }
-}
-
 sub _gen_level {
     my ($level) = @_;
     my $is_name = "is_$level";
@@ -173,12 +166,11 @@ sub _gen_level {
     my $level_sub = _gen_level_sub( $level, $is_name );
     my $is_level_sub = _gen_is_level_sub($level);
 
-    _name_sub( "$level",   $level_sub );
-    _name_sub( "$is_name", $is_level_sub );
+    _can_name_sub and _name_sub( "$level",   $level_sub );
+    _can_name_sub and _name_sub( "$is_name", $is_level_sub );
 
     no strict 'refs';
     *{$level}   = $level_sub;
     *{$is_name} = $is_level_sub;
 }
-
 1;
