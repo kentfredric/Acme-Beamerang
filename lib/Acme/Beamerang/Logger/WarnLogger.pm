@@ -69,6 +69,8 @@ BEGIN {
     }
 }
 
+_gen_level($_) for (@levels);
+
 sub new {
     my ( $class, $args ) = @_;
 
@@ -93,8 +95,6 @@ sub _log {
     $label .= ' ' . $self->{label} if $self->{label};
     warn "[${label}] $message";
 }
-
-_gen_level($_) for (@levels);
 
 sub _gen_level_sub {
     my ( $level, $is_name ) = @_;
@@ -180,5 +180,5 @@ sub _gen_level {
     *{$level}   = $level_sub;
     *{$is_name} = $is_level_sub;
 }
-1;
 
+1;
